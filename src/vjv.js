@@ -33,17 +33,39 @@ const strictFutureReservedWords = ['implements', 'package', 'protected', 'interf
 const strictFutureReservedWordsES5 = ['implements', 'let', 'private', 'public', 'yield',	'interface',
 'package', 'protected', 'static']
 
+// null字面量
 const nullLiteral = ['null']
 
+// boolean字面量
 const booleanLiteral = ['true', 'false']
 
-// var onlyES6
+var ES6, ES5, ES2018
 
-// const onlyES6Regex = /\\u[a-fA-F0-9]{4}/ // 表示是不是只有ES6以上的语法才可以支持
+const AllVersionError = {
+  ES5: false,
+  ES6: false,
+  ES2018: false
+}
 
 /** 是否可以作为标识start部分 */
 function isIdentifierStart (ch) {
-  if (/[$_]/.test(ch) || unicode_id_start_regex.test(ch)) return true
+
+  /** 如果start能够匹配$ _ 和带有id_start属性的Unicode字符（\u1234）
+   * 那么这个start部分是符合ES5和ES6共同的标准
+  */
+  if (/[$_]/.test(ch) || unicode_id_start_regex.test(ch)) {
+    ES5 = true
+    ES6 = true
+    ES2018 = true
+    return
+  }
+
+  /** 
+   * 在这里需要去分辨是可以在ES6环境中运行的，还是ES2018环境中运行的
+   */
+  if (/^\\u\{([a-fA-F0-9]{1,})\}$/.test(ch)) {
+    console.log('regexp', RegExp.$1)
+  }
   return false
 }
 
@@ -77,10 +99,9 @@ function splitStartAndPart (varName) {
   return result
 }
 
-var ES6, ES5
 
 export default function (varName) {
-  if (!varName) return { ES5: false, ES6: false }
+  if (!varName) return AllVersionError
 
   /** 根据关键字或者保留字判断ES5环境通过还是ES6环境通过检测 */
   // 不能为保留字 ES6+
@@ -95,6 +116,7 @@ export default function (varName) {
     ES6 = false
   } else {
     ES6 = true
+    ES2018 = true
   }
 
   // 不能为保留字 ES5
@@ -111,15 +133,20 @@ export default function (varName) {
   }
 
   // 如果在ES5和ES6的环境上都无法通过，则直接返回全部失败
-  if (!ES5 && !ES6) return { ES5, ES6 }
+  if (!ES5 && !ES6) return AllVersionError
 
-  // 匹配到了\uxxx （x的个数为0-3） 就一定不符合ES5或者ES6 中转义字符应该是\uxxxx的规则
-  if (/\\u[a-fA-F0-9]{0,3}[^a-fA-F0-9]*$/.test(varName)) return { ES5: false, ES6: false }
+  // 匹配到了\uxxx （x的个数为0-3） 就一定不符合ES5或者ES6+ 中转义字符应该是\uxxxx的规则 也全部返回失败
+  if (/\\u[a-fA-F0-9]{0,3}[^a-fA-F0-9]*$/.test(varName)) return AllVersionError
 
-  /** 匹配到\u{codepoint} 语法 但是codepoint 必须小于0x10ffff
-  * 我们这边先匹配如果codepoint大于6位，则直接返回false的情况
+  /** 
+  * \u{codepoint} 的语法是ES2018才开始有的 并且codepoint 必须小于0x10ffff
+  * 在ES6 - ES2017 规则为\u{HexDigits} 而HexDigits只要是16进制的数字即可，没有大小限制
+  * 在ES5中并没有\u{xxx} 这样的语法
   */
-  if (/^\\u\{([a-fA-F0-9]{6,})\}/.test(varName)) return { ES5: false, ES6: false }
+  if (/\\u\{([a-fA-F0-9]{1,})\}/.test(varName)) {
+    ES5 = false
+    ES6 = ES2018 = true
+  }
 
   var startAndPart = splitStartAndPart(varName)
   isIdentifierStart(startAndPart[0])
